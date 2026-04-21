@@ -1,0 +1,7 @@
+out/
+dist/
+build/sources.txt
+*.class
+.idea/
+.vscode/
+*.iml

@@ -57,7 +57,7 @@ public class MainWindow extends JFrame {
     private Timer ticker;
 
     public MainWindow() {
-        super("ExitLag Clone — Route Optimizer (Final Project ASD)");
+        super("FiveM Route Optimizer — ExitLag-style (Final Project ASD)");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1100, 680);
         setLocationRelativeTo(null);
@@ -79,7 +79,7 @@ public class MainWindow extends JFrame {
         ticker = new Timer(1500, e -> onTick());
         ticker.start();
 
-        log("ExitLag Clone ready. Pick a game server and click Connect.");
+        log("FiveM Booster ready. Pick a FiveM server and click Connect.");
     }
 
     private JPanel buildSidebar() {
@@ -89,8 +89,8 @@ public class MainWindow extends JFrame {
         p.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
         p.setPreferredSize(new Dimension(280, 0));
 
-        JLabel title = header("ExitLag Clone", 20f);
-        JLabel subtitle = header("Gaming route optimizer", 12f);
+        JLabel title = header("FiveM Booster", 20f);
+        JLabel subtitle = header("ExitLag-style route optimizer", 12f);
         subtitle.setForeground(new Color(150, 160, 180));
 
         p.add(title);
@@ -100,7 +100,7 @@ public class MainWindow extends JFrame {
         stretch(originBox);
         p.add(originBox);
         p.add(Box.createVerticalStrut(12));
-        p.add(label("Game Server"));
+        p.add(label("FiveM Server"));
         stretch(serverBox);
         p.add(serverBox);
         p.add(Box.createVerticalStrut(18));
@@ -118,8 +118,9 @@ public class MainWindow extends JFrame {
 
         JLabel note = new JLabel("<html><body style='width:220px'>"
                 + "<p style='color:#8892a8;font-size:10px'>Simulation only — does not "
-                + "intercept real network traffic. It demonstrates the A* routing "
-                + "strategy that tools like ExitLag use to select the fastest path.</p>"
+                + "tunnel real FiveM/GTA traffic. It demonstrates the A* routing "
+                + "strategy that tools like ExitLag use to pick the fastest relay "
+                + "path to a FiveM server.</p>"
                 + "</body></html>");
         note.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.add(note);
