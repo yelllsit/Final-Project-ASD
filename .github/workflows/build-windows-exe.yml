@@ -23,33 +23,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Show versions
+      - name: Build
         run: |
+          set -euxo pipefail
           java -version
-          javac -version
-          jar --version
           jpackage --version
-
-      - name: Compile
-        run: |
           mkdir -p out dist build
-          find src -name '*.java' > build/sources.txt
-          cat build/sources.txt
-          javac -d out @build/sources.txt
-
-      - name: Write manifest
-        run: |
+          find src -name '*.java' -print0 | xargs -0 javac -d out
           printf 'Manifest-Version: 1.0\nMain-Class: exitlag.Main\nImplementation-Title: FiveM Booster\nImplementation-Version: 1.0.0\n' > build/manifest.txt
-          cat build/manifest.txt
-
-      - name: Package fat JAR
-        run: jar --create --file dist/FiveMBooster.jar --manifest build/manifest.txt -C out .
-
-      - name: Smoke-test JAR loads
-        run: unzip -p dist/FiveMBooster.jar META-INF/MANIFEST.MF
-
-      - name: jpackage app-image
-        run: |
+          jar --create --file dist/FiveMBooster.jar --manifest build/manifest.txt -C out .
           jpackage \
             --type app-image \
             --name FiveMBooster \
@@ -61,12 +43,8 @@ jobs:
             --dest dist
           ls -la dist
           ls -la dist/FiveMBooster
-
-      - name: Zip app-image
-        run: |
-          cd dist
-          powershell -Command "Compress-Archive -Path 'FiveMBooster/*' -DestinationPath 'FiveMBooster-windows.zip' -Force"
-          ls -la
+          (cd dist && 7z a FiveMBooster-windows.zip FiveMBooster/*)
+          ls -la dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,14 +57,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
+          set -euxo pipefail
           TAG=latest
           gh release delete "$TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
-          sleep 2
+          sleep 3
           gh release create "$TAG" \
-            "dist/FiveMBooster-windows.zip" \
-            "dist/FiveMBooster.jar" \
+            dist/FiveMBooster-windows.zip \
+            dist/FiveMBooster.jar \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "FiveM Booster - latest build" \
-            --notes "Automatic build from commit $GITHUB_SHA on branch $GITHUB_REF_NAME. Download FiveMBooster-windows.zip, unzip it, and run FiveMBooster/FiveMBooster.exe."
+            --notes "Auto-built from commit ${GITHUB_SHA}. Download FiveMBooster-windows.zip, unzip it, then run FiveMBooster/FiveMBooster.exe. The JAR is provided as a portable alternative (java -jar FiveMBooster.jar)."
