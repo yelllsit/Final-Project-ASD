@@ -23,40 +23,48 @@ jobs:
       - name: Compile sources
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path out, dist, build | Out-Null
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          New-Item -ItemType Directory -Force -Path build | Out-Null
           $sources = Get-ChildItem -Recurse src -Filter *.java | Select-Object -ExpandProperty FullName
           javac -d out $sources
 
       - name: Write manifest
         shell: pwsh
         run: |
-          @"
+          $manifest = @"
           Manifest-Version: 1.0
           Main-Class: exitlag.Main
           Implementation-Title: FiveM Booster
           Implementation-Version: 1.0.0
-          "@ | Set-Content -Path build/manifest.txt -NoNewline
+          "@
+          Set-Content -Path build/manifest.txt -Value $manifest -NoNewline
 
       - name: Package fat JAR
         run: jar --create --file dist/FiveMBooster.jar --manifest build/manifest.txt -C out .
 
       - name: Build Windows app-image via jpackage
-        run: >
-          jpackage
-          --type app-image
-          --name "FiveM Booster"
-          --app-version 1.0.0
-          --vendor "Final Project ASD"
-          --input dist
-          --main-jar FiveMBooster.jar
-          --main-class exitlag.Main
-          --dest dist
-
-      - name: Zip app-image for download
         shell: pwsh
-        run: Compress-Archive -Path "dist/FiveM Booster" -DestinationPath "dist/FiveMBooster-windows.zip" -Force
+        run: |
+          jpackage `
+            --type app-image `
+            --name "FiveMBooster" `
+            --app-version 1.0.0 `
+            --vendor "Final Project ASD" `
+            --input dist `
+            --main-jar FiveMBooster.jar `
+            --main-class exitlag.Main `
+            --dest dist
+          if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit $LASTEXITCODE" }
 
-      - name: Upload workflow artifacts (backup)
+      - name: Zip app-image
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/FiveMBooster")) { throw "app-image folder not found" }
+          Compress-Archive -Path "dist/FiveMBooster/*" -DestinationPath "dist/FiveMBooster-windows.zip" -Force
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: FiveMBooster-windows
@@ -64,19 +72,26 @@ jobs:
             dist/FiveMBooster-windows.zip
             dist/FiveMBooster.jar
 
-      - name: Publish / update "latest" GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: FiveM Booster — latest build
-          body: |
-            Automatic build from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "latest"
+          $title = "FiveM Booster - latest build"
+          $notes = "Automatic build from commit $env:GITHUB_SHA on branch $env:GITHUB_REF_NAME.`n`n" +
+                   "Downloads:`n" +
+                   "- FiveMBooster-windows.zip - unzip and run FiveMBooster/FiveMBooster.exe`n" +
+                   "- FiveMBooster.jar - portable JAR, run with java -jar FiveMBooster.jar (needs JDK 17+)"
 
-            **Downloads**
-            - `FiveMBooster-windows.zip` — unzip and run `FiveM Booster/FiveM Booster.exe`
-            - `FiveMBooster.jar` — portable JAR, run with `java -jar FiveMBooster.jar` (needs JDK 17+)
-          files: |
-            dist/FiveMBooster-windows.zip
-            dist/FiveMBooster.jar
-          prerelease: false
-          make_latest: "true"
+          # Delete existing release + tag if present so we can overwrite
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          Start-Sleep -Seconds 2
+
+          gh release create $tag `
+            "dist/FiveMBooster-windows.zip" `
+            "dist/FiveMBooster.jar" `
+            --title $title `
+            --notes $notes `
+            --target $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit $LASTEXITCODE" }
