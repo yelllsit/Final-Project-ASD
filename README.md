@@ -52,16 +52,19 @@ The app-image build uses `jpackage --type app-image` and needs no extra
 tooling. The installer build (`.exe` installer) additionally requires the
 free [WiX Toolset 3.x](https://wixtoolset.org/).
 
-### Option 3 — download the pre-built `.exe` from GitHub Actions
+### Option 3 — download the pre-built `.exe` from GitHub Releases
 
-Every push to `main` or a `claude/*` branch triggers
-`.github/workflows/build-windows-exe.yml`, which runs on a Windows runner and
-uploads two artifacts:
+Every push automatically publishes / updates the **`latest`** GitHub Release
+with these assets attached:
 
-- `FiveMBooster-windows` — zipped app-image with `FiveM Booster.exe` inside
-- `FiveMBooster-jar` — the portable fat JAR
+- **`FiveMBooster-windows.zip`** — unzip, then double-click `FiveM Booster.exe`
+- **`FiveMBooster.jar`** — portable JAR, run with `java -jar FiveMBooster.jar`
 
-Grab them from the workflow run's *Artifacts* section on GitHub.
+Download the latest release directly at:
+
+**https://github.com/yelllsit/final-project-asd/releases/latest**
+
+No GitHub login needed.
 
 ## How it works
 
