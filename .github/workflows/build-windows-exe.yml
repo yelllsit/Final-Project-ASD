@@ -23,15 +23,45 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build
+      - name: Diagnostics
+        run: |
+          set -x
+          java -version 2>&1
+          javac -version 2>&1
+          jar --version
+          jpackage --version
+          which jpackage
+          which 7z || echo "no 7z"
+          which zip || echo "no zip"
+          which powershell || echo "no powershell"
+          uname -a
+          echo "JAVA_HOME=$JAVA_HOME"
+          ls -la
+          ls -la src/exitlag
+
+      - name: Compile
         run: |
           set -euxo pipefail
-          java -version
-          jpackage --version
           mkdir -p out dist build
-          find src -name '*.java' -print0 | xargs -0 javac -d out
+          find src -name '*.java' > build/sources.txt
+          wc -l build/sources.txt
+          cat build/sources.txt
+          javac -d out @build/sources.txt
+          echo "compile OK"
+          find out -name '*.class' | head -5
+
+      - name: Package fat JAR
+        run: |
+          set -euxo pipefail
           printf 'Manifest-Version: 1.0\nMain-Class: exitlag.Main\nImplementation-Title: FiveM Booster\nImplementation-Version: 1.0.0\n' > build/manifest.txt
+          cat build/manifest.txt
           jar --create --file dist/FiveMBooster.jar --manifest build/manifest.txt -C out .
+          ls -la dist
+          jar tf dist/FiveMBooster.jar | head -10
+
+      - name: jpackage
+        run: |
+          set -euxo pipefail
           jpackage \
             --type app-image \
             --name FiveMBooster \
@@ -40,11 +70,26 @@ jobs:
             --input dist \
             --main-jar FiveMBooster.jar \
             --main-class exitlag.Main \
-            --dest dist
+            --dest dist \
+            --verbose 2>&1 | tee build/jpackage.log
           ls -la dist
-          ls -la dist/FiveMBooster
-          (cd dist && 7z a FiveMBooster-windows.zip FiveMBooster/*)
-          ls -la dist
+          ls -la "dist/FiveMBooster"
+
+      - name: Zip via 7z
+        run: |
+          set -euxo pipefail
+          cd dist
+          7z a FiveMBooster-windows.zip FiveMBooster
+          ls -la
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics
+          path: |
+            build/
+            dist/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -67,4 +112,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "FiveM Booster - latest build" \
-            --notes "Auto-built from commit ${GITHUB_SHA}. Download FiveMBooster-windows.zip, unzip it, then run FiveMBooster/FiveMBooster.exe. The JAR is provided as a portable alternative (java -jar FiveMBooster.jar)."
+            --notes "Auto-built from commit ${GITHUB_SHA}. Download FiveMBooster-windows.zip, unzip, then run FiveMBooster/FiveMBooster.exe. The JAR is a portable alternative (java -jar FiveMBooster.jar, JDK 17+)."
