@@ -55,9 +55,11 @@ jobs:
           set -euxo pipefail
           printf 'Manifest-Version: 1.0\nMain-Class: exitlag.Main\nImplementation-Title: FiveM Booster\nImplementation-Version: 1.0.0\n' > build/manifest.txt
           cat build/manifest.txt
-          jar --create --file dist/FiveMBooster.jar --manifest build/manifest.txt -C out .
-          ls -la dist
-          jar tf dist/FiveMBooster.jar | head -10
+          mkdir -p input
+          jar --create --file input/FiveMBooster.jar --manifest build/manifest.txt -C out .
+          cp input/FiveMBooster.jar dist/FiveMBooster.jar
+          ls -la input dist
+          jar tf input/FiveMBooster.jar | head -10
 
       - name: jpackage
         run: |
@@ -67,7 +69,7 @@ jobs:
             --name FiveMBooster \
             --app-version 1.0.0 \
             --vendor "Final Project ASD" \
-            --input dist \
+            --input input \
             --main-jar FiveMBooster.jar \
             --main-class exitlag.Main \
             --dest dist \
