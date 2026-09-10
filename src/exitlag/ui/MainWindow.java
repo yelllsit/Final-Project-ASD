@@ -13,6 +13,7 @@ import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -24,14 +25,15 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.util.List;
 
 /**
- * Main ExitLag-like window. Lets the user pick an origin city and a game
- * server, then compares the direct route against the A*-optimized route and
- * shows ping / jitter / packet-loss improvements live.
+ * Main FiveM Booster window. Lets the user pick an origin city and a FiveM
+ * server, compares the direct route against the A*-optimized route, and
+ * shows ping / jitter / packet-loss improvements live with sparkline history.
  */
 public class MainWindow extends JFrame {
 
@@ -42,24 +44,26 @@ public class MainWindow extends JFrame {
     private final JComboBox<String> originBox = new JComboBox<>();
     private final JComboBox<GameServer> serverBox = new JComboBox<>();
     private final JButton connectBtn = new JButton("Connect & Optimize");
+    private final JButton autoBestBtn = new JButton("Auto-pick fastest");
     private final JLabel statusLbl = new JLabel("Idle");
+    private final PingLed led = new PingLed();
 
     private final RouteCanvas canvas = new RouteCanvas(graph);
     private final DefaultListModel<String> logModel = new DefaultListModel<>();
     private final JList<String> logView = new JList<>(logModel);
 
-    private final MetricBox pingBox = new MetricBox("Ping", "ms");
-    private final MetricBox jitterBox = new MetricBox("Jitter", "ms");
-    private final MetricBox lossBox = new MetricBox("Loss", "%");
-    private final MetricBox hopsBox = new MetricBox("Hops", "");
+    private final MetricBox pingBox = new MetricBox("Ping", "ms", true);
+    private final MetricBox jitterBox = new MetricBox("Jitter", "ms", false);
+    private final MetricBox lossBox = new MetricBox("Loss", "%", false);
+    private final MetricBox hopsBox = new MetricBox("Hops", "", false);
 
     private boolean connected = false;
-    private Timer ticker;
+    private final Timer ticker;
 
     public MainWindow() {
-        super("FiveM Route Optimizer — ExitLag-style (Final Project ASD)");
+        super("FiveM Booster — Route Optimizer (Final Project ASD)");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(1100, 680);
+        setSize(1140, 720);
         setLocationRelativeTo(null);
         getContentPane().setBackground(new Color(22, 26, 38));
 
@@ -75,11 +79,12 @@ public class MainWindow extends JFrame {
         add(buildFooter(),  BorderLayout.SOUTH);
 
         connectBtn.addActionListener(e -> toggleConnection());
+        autoBestBtn.addActionListener(e -> pickFastestServer());
 
         ticker = new Timer(1500, e -> onTick());
         ticker.start();
 
-        log("FiveM Booster ready. Pick a FiveM server and click Connect.");
+        log("FiveM Booster ready. Pick a server, or click Auto-pick fastest.");
     }
 
     private JPanel buildSidebar() {
@@ -87,14 +92,20 @@ public class MainWindow extends JFrame {
         p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
         p.setBackground(new Color(28, 33, 48));
         p.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
-        p.setPreferredSize(new Dimension(280, 0));
+        p.setPreferredSize(new Dimension(290, 0));
 
+        JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        titleRow.setOpaque(false);
+        titleRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        titleRow.add(led);
         JLabel title = header("FiveM Booster", 20f);
+        titleRow.add(title);
+        p.add(titleRow);
+
         JLabel subtitle = header("ExitLag-style route optimizer", 12f);
         subtitle.setForeground(new Color(150, 160, 180));
-
-        p.add(title);
         p.add(subtitle);
+
         p.add(Box.createVerticalStrut(18));
         p.add(label("Your Location"));
         stretch(originBox);
@@ -103,12 +114,13 @@ public class MainWindow extends JFrame {
         p.add(label("FiveM Server"));
         stretch(serverBox);
         p.add(serverBox);
+        p.add(Box.createVerticalStrut(8));
+        stretch(autoBestBtn);
+        styleSecondaryButton(autoBestBtn);
+        p.add(autoBestBtn);
         p.add(Box.createVerticalStrut(18));
         stretch(connectBtn);
-        connectBtn.setBackground(new Color(72, 220, 140));
-        connectBtn.setForeground(new Color(10, 20, 30));
-        connectBtn.setFocusPainted(false);
-        connectBtn.setFont(connectBtn.getFont().deriveFont(Font.BOLD, 14f));
+        stylePrimaryButton(connectBtn, true);
         p.add(connectBtn);
         p.add(Box.createVerticalStrut(10));
         statusLbl.setForeground(new Color(170, 180, 200));
@@ -161,14 +173,16 @@ public class MainWindow extends JFrame {
         connected = !connected;
         if (connected) {
             connectBtn.setText("Disconnect");
-            connectBtn.setBackground(new Color(255, 120, 120));
+            stylePrimaryButton(connectBtn, false);
             statusLbl.setText("Connected");
+            led.setConnected(true);
             log("Connecting to " + selectedServer());
             recomputeRoute();
         } else {
             connectBtn.setText("Connect & Optimize");
-            connectBtn.setBackground(new Color(72, 220, 140));
+            stylePrimaryButton(connectBtn, true);
             statusLbl.setText("Idle");
+            led.setConnected(false);
             canvas.setRoute(null, null, null);
             pingBox.clear();
             jitterBox.clear();
@@ -209,6 +223,29 @@ public class MainWindow extends JFrame {
                 String.join("→", optimal.getHops())));
     }
 
+    /**
+     * Scans every configured server for the current origin and picks the one
+     * with the lowest optimized ping. Selects it in the dropdown and connects.
+     */
+    private void pickFastestServer() {
+        String originId = selectedOriginId();
+        if (originId == null) return;
+        GameServer best = null;
+        double bestPing = Double.POSITIVE_INFINITY;
+        for (GameServer s : servers) {
+            Route r = graph.optimalRoute(originId, s.getRelayId());
+            if (r != null && r.getPingMs() < bestPing) {
+                bestPing = r.getPingMs();
+                best = s;
+            }
+        }
+        if (best == null) { log("No reachable server."); return; }
+        serverBox.setSelectedItem(best);
+        log(String.format("Auto-picked %s (~%.0f ms).", best, bestPing));
+        if (!connected) toggleConnection();
+        else recomputeRoute();
+    }
+
     private String selectedOriginId() {
         Object v = originBox.getSelectedItem();
         if (v == null) return null;
@@ -242,19 +279,40 @@ public class MainWindow extends JFrame {
     }
 
     private static void stretch(Component c) {
-        c.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        ((javax.swing.JComponent) c).setAlignmentX(Component.LEFT_ALIGNMENT);
+        c.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        ((JComponent) c).setAlignmentX(Component.LEFT_ALIGNMENT);
     }
 
-    /** A small card showing an optimized metric and the improvement over the direct route. */
+    private static void stylePrimaryButton(JButton b, boolean idle) {
+        b.setBackground(idle ? new Color(72, 220, 140) : new Color(255, 120, 120));
+        b.setForeground(new Color(10, 20, 30));
+        b.setFocusPainted(false);
+        b.setBorderPainted(false);
+        b.setFont(b.getFont().deriveFont(Font.BOLD, 14f));
+    }
+
+    private static void styleSecondaryButton(JButton b) {
+        b.setBackground(new Color(46, 56, 78));
+        b.setForeground(new Color(220, 230, 245));
+        b.setFocusPainted(false);
+        b.setBorderPainted(false);
+        b.setFont(b.getFont().deriveFont(Font.PLAIN, 12f));
+    }
+
+    /**
+     * A metric card: label, big number, delta vs direct, and (for ping) a
+     * rolling sparkline so the user can see how the metric moves over time.
+     */
     private static class MetricBox extends JPanel {
         private final JLabel name = new JLabel("", SwingConstants.LEFT);
         private final JLabel value = new JLabel("--", SwingConstants.LEFT);
         private final JLabel delta = new JLabel(" ", SwingConstants.LEFT);
+        private final Sparkline spark;
         private final String unit;
 
-        MetricBox(String label, String unit) {
+        MetricBox(String label, String unit, boolean withSparkline) {
             this.unit = unit;
+            this.spark = withSparkline ? new Sparkline(40) : null;
             setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
             setBackground(new Color(28, 33, 48));
             setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
@@ -266,6 +324,10 @@ public class MainWindow extends JFrame {
             add(name);
             add(value);
             add(delta);
+            if (spark != null) {
+                add(Box.createVerticalStrut(6));
+                add(spark);
+            }
         }
 
         void update(double optimal, double baseline) {
@@ -280,11 +342,22 @@ public class MainWindow extends JFrame {
                         sign, Math.abs(diff), unit.isEmpty() ? "" : unit, pct));
                 delta.setForeground(diff >= 0 ? new Color(72, 220, 140) : new Color(255, 120, 120));
             }
+            if (spark != null) {
+                spark.setColor(qualityColor(optimal));
+                spark.push(optimal);
+            }
         }
 
         void clear() {
             value.setText("--");
             delta.setText(" ");
+            if (spark != null) spark.clear();
+        }
+
+        private Color qualityColor(double ping) {
+            if (ping < 60) return new Color(72, 220, 140);
+            if (ping < 120) return new Color(240, 200, 100);
+            return new Color(255, 120, 120);
         }
 
         private String format(double v) {

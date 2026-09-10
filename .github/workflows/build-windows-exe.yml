@@ -84,6 +84,31 @@ jobs:
           7z a FiveMBooster-windows.zip FiveMBooster
           ls -la
 
+      - name: jpackage Windows installer (.exe)
+        run: |
+          set -euxo pipefail
+          mkdir -p installer
+          jpackage \
+            --type exe \
+            --name FiveMBooster \
+            --app-version 1.0.0 \
+            --vendor "Final Project ASD" \
+            --description "FiveM route optimizer (ExitLag-style)" \
+            --input input \
+            --main-jar FiveMBooster.jar \
+            --main-class exitlag.Main \
+            --dest installer \
+            --win-menu \
+            --win-menu-group "FiveM Booster" \
+            --win-shortcut \
+            --win-shortcut-prompt \
+            --win-dir-chooser \
+            --win-per-user-install \
+            --verbose 2>&1 | tee build/jpackage-installer.log
+          ls -la installer
+          mv installer/*.exe dist/FiveMBooster-installer.exe
+          ls -la dist
+
       - name: Upload diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -97,6 +122,7 @@ jobs:
         with:
           name: FiveMBooster-windows
           path: |
+            dist/FiveMBooster-installer.exe
             dist/FiveMBooster-windows.zip
             dist/FiveMBooster.jar
 
@@ -109,9 +135,16 @@ jobs:
           gh release delete "$TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           sleep 3
           gh release create "$TAG" \
+            dist/FiveMBooster-installer.exe \
             dist/FiveMBooster-windows.zip \
             dist/FiveMBooster.jar \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "FiveM Booster - latest build" \
-            --notes "Auto-built from commit ${GITHUB_SHA}. Download FiveMBooster-windows.zip, unzip, then run FiveMBooster/FiveMBooster.exe. The JAR is a portable alternative (java -jar FiveMBooster.jar, JDK 17+)."
+            --notes "Auto-built from commit ${GITHUB_SHA}.
+
+          **Recommended:** download **FiveMBooster-installer.exe**, run it, follow the wizard (Start Menu shortcut + uninstaller included).
+
+          Alternatives:
+          - **FiveMBooster-windows.zip** — portable, unzip and run FiveMBooster/FiveMBooster.exe (no install)
+          - **FiveMBooster.jar** — cross-platform JAR, run with java -jar FiveMBooster.jar (needs JDK 17+)"
